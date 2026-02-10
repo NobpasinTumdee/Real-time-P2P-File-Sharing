@@ -7,7 +7,7 @@ interface FilePayload {
   dataType: 'FILE';
   fileName: string;
   fileType: string;
-  fileData: ArrayBuffer; // PeerJS ส่งข้อมูลเป็น ArrayBuffer
+  fileData: ArrayBuffer;
 }
 
 // กำหนด Type ของไฟล์ที่ได้รับมา (แปลงเป็น Blob Url แล้ว)
@@ -21,19 +21,17 @@ export default function App() {
   const [status, setStatus] = useState<string>('Initializing...');
   const [receivedFile, setReceivedFile] = useState<ReceivedFile | null>(null);
 
-  // ใช้ useRef เก็บ connection เพื่อไม่ให้หลุดตอน Re-render
   const peerRef = useRef<Peer | null>(null);
   const connRef = useRef<DataConnection | null>(null);
 
   useEffect(() => {
-    // 1. สร้าง Identity ของเครื่องเรา
-    const peer = new Peer();
+    let myCustomId = generateShortId();
+    const peer = new Peer(myCustomId);
 
     peer.on('open', (id) => {
       setMyId(id);
       setStatus('Waiting for connection...');
 
-      // 2. เช็คว่าเราเข้ามาผ่าน QR Code หรือไม่? (Auto Connect Logic)
       // URL Pattern: http://host/?remoteId=XXX
       const params = new URLSearchParams(window.location.search);
       const remoteId = params.get('remoteId');
@@ -43,7 +41,6 @@ export default function App() {
       }
     });
 
-    // 3. (ฝั่ง PC) รอรับการเชื่อมต่อจาก Mobile
     peer.on('connection', (conn) => {
       setupConnection(conn);
     });
@@ -55,14 +52,12 @@ export default function App() {
     };
   }, []);
 
-  // ฟังก์ชันเริ่มเชื่อมต่อ (Active Connection)
   const connectToPeer = (remoteId: string, peer: Peer) => {
     setStatus(`Connecting to ${remoteId}...`);
     const conn = peer.connect(remoteId);
     setupConnection(conn);
   };
 
-  // ฟังก์ชันจัดการ Events เมื่อเชื่อมต่อสำเร็จ (ใช้ได้ทั้งสองฝั่ง)
   const setupConnection = (conn: DataConnection) => {
     connRef.current = conn;
 
@@ -71,7 +66,7 @@ export default function App() {
     });
 
     conn.on('data', (data: unknown) => {
-      // ตรวจสอบ Type ข้อมูลก่อนใช้งาน (Type Guard)
+      // Type Guard
       const payload = data as FilePayload;
 
       if (payload.dataType === 'FILE') {
@@ -100,7 +95,7 @@ export default function App() {
     });
   };
 
-  // ฟังก์ชันส่งไฟล์
+  // function send file data via WebRTC
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !connRef.current) return;
@@ -121,8 +116,16 @@ export default function App() {
     setStatus(`Sent ${file.name} successfully!`);
   };
 
-  // สร้าง URL สำหรับ QR Code (ใช้ IP เครื่องจริง หรือ Domain จริงในการ Deploy)
-  // หมายเหตุ: ถ้า Test localhost บน PC, มือถือจะเข้าไม่ได้ ต้องใช้ IP LAN (เช่น 192.168.x.x)
+
+  const generateShortId = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 4; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
   const shareUrl = `${window.location.href.split('?')[0]}?remoteId=${myId}`;
 
   return (
@@ -130,53 +133,44 @@ export default function App() {
       <div style={{ position: 'fixed', bottom: '0px', textAlign: 'center', width: '100vw' }}>
         <p>version: v1.0.0 DEMO</p>
       </div>
-      <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto' }}>
+      <div>
         <h2>P2P File Drop</h2>
 
         {/* Status Bar */}
-        <div style={{ padding: '10px', background: '#e0e0e0', borderRadius: '8px', marginBottom: '20px' }}>
+        <div>
           <strong>Status:</strong> {status}
         </div>
 
-        {/* SENDER UI (PC): แสดง QR Code ก็ต่อเมื่อยังไม่ได้เชื่อมต่อ 
-        และเราไม่ใช่คนที่กดเข้ามาผ่าน Link (ไม่มี remoteId ใน URL)
-      */}
         {!connRef.current && !window.location.search.includes('remoteId') && myId && (
-          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+          <div>
             <p>Scan with Mobile to Connect:</p>
-            <div style={{ background: 'white', padding: '16px', display: 'inline-block', border: '1px solid #ddd' }}>
+            <div>
               <QRCode value={shareUrl} size={150} />
             </div>
-            <p style={{ fontSize: '0.8rem', color: '#666', wordBreak: 'break-all' }}>
+            <p>
               {shareUrl}
             </p>
           </div>
         )}
 
-        {/* FILE TRANSFER UI: แสดงเมื่อเชื่อมต่อแล้ว */}
         {status.includes('Connected') || status.includes('Sent') || status.includes('Received') ? (
-          <div style={{ border: '2px dashed #ccc', padding: '20px', borderRadius: '8px', textAlign: 'center' }}>
+          <div>
 
-            {/* ส่วนส่งไฟล์ */}
-            <div style={{ marginBottom: '20px' }}>
+            <div>
               <h4>Send File</h4>
               <input type="file" onChange={handleFileChange} />
             </div>
 
-            <hr style={{ margin: '20px 0' }} />
+            <hr />
 
-            {/* ส่วนรับไฟล์ (แสดงปุ่ม Download) */}
+            {/* Download */}
             {receivedFile && (
-              <div style={{ background: '#d4edda', padding: '15px', borderRadius: '8px', color: '#155724' }}>
+              <div>
                 <h4>New File Received!</h4>
                 <p>{receivedFile.fileName}</p>
                 <a
                   href={receivedFile.url}
                   download={receivedFile.fileName}
-                  style={{
-                    background: '#28a745', color: 'white', padding: '10px 20px',
-                    textDecoration: 'none', borderRadius: '5px', display: 'inline-block'
-                  }}
                 >
                   Tap to Download
                 </a>
