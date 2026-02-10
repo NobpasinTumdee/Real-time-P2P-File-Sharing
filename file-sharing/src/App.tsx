@@ -86,15 +86,19 @@ export default function App() {
   // --- Connection Logic ---
   const connectToPeer = (remoteId: string, peer: Peer) => {
     setStatus(`Connecting to ${remoteId}...`);
-    const conn = peer.connect(remoteId);
+    // reliable: true  Reliable mode is (TCP protocol)
+    const conn = peer.connect(remoteId, {
+      reliable: true
+    });
     setupConnection(conn);
   };
-
   const setupConnection = (conn: DataConnection) => {
     connRef.current = conn;
     conn.on('open', () => {
       setStatus('Connected');
       setShowScanner(false);
+      const audio = new Audio('/applepay.mp3');
+      audio.play().catch(e => console.log("Audio play failed", e));
     });
     conn.on('data', (data: unknown) => handleIncomingData(data as Packet));
     conn.on('close', () => {
@@ -147,12 +151,14 @@ export default function App() {
     }
   };
 
-  // --- 🚀 Send Logic (Fixed with Backpressure) ---
-  const sendFile = async (file: File) => {
+  // --- Send via TCP Logic ---
+  const sendFileTCP = async (file: File) => {
     if (!connRef.current) return;
 
     setStatus(`Sending ${file.name}...`);
     setProgress(0);
+
+    const dataChannel = (connRef.current as any).dataChannel as RTCDataChannel;
 
     // 1. Send Metadata
     connRef.current.send({
@@ -160,18 +166,57 @@ export default function App() {
       payload: { name: file.name, size: file.size, type: file.type }
     } as Packet);
 
-    // 2. Loop Send Chunks with Flow Control
     let offset = 0;
 
-    // เข้าถึง DataChannel เพื่อเช็ค Buffer (ต้อง Cast type นิดหน่อย)
+    while (offset < file.size) {
+      // ถ้า buffer เกินขีดจำกัด ให้ "หยุดรอ" (await) จนกว่าจะว่าง
+      while (dataChannel.bufferedAmount > CHUNK_SIZE) {
+        await new Promise(r => setTimeout(r, 5));
+      }
+
+      const slice = file.slice(offset, offset + CHUNK_SIZE);
+      const buffer = await slice.arrayBuffer();
+
+      connRef.current.send({
+        type: 'CHUNK',
+        payload: { data: buffer, offset }
+      } as Packet);
+
+      offset += buffer.byteLength;
+      setProgress(Math.round((offset / file.size) * 100));
+    }
+
+    // รอจนกว่าข้อมูลชิ้นสุดท้ายจะออกจาก Buffer จริงๆ
+    while (dataChannel.bufferedAmount > 0) {
+      await new Promise(r => setTimeout(r, 10));
+    }
+
+    connRef.current.send({ type: 'END', payload: null } as Packet);
+    const audio = new Audio('/steam-achievement.mp3');
+    audio.play().catch(e => console.log("Audio play failed", e));
+    setStatus('Sent successfully!');
+  };
+
+  // --- Send via UDP Logic ---
+  const sendFileUDP = async (file: File) => {
+    if (!connRef.current) return;
+
+    setStatus(`Sending ${file.name}...`);
+    setProgress(0);
+
+    connRef.current.send({
+      type: 'META',
+      payload: { name: file.name, size: file.size, type: file.type }
+    } as Packet);
+
+    let offset = 0;
+
     const dataChannel = (connRef.current as any).dataChannel as RTCDataChannel;
 
     while (offset < file.size) {
-      // เช็คว่า Buffer เต็มหรือไม่? (Backpressure)
-      // ถ้า buffer เกิน 64KB ให้รอก่อน อย่าเพิ่งยัดเพิ่ม
       if (dataChannel.bufferedAmount > 64 * 1024) {
-        await new Promise(r => setTimeout(r, 10)); // รอ 10ms แล้วเช็คใหม่
-        continue; // วนลูปกลับไปเช็คใหม่
+        await new Promise(r => setTimeout(r, 10));
+        continue;
       }
 
       const slice = file.slice(offset, offset + CHUNK_SIZE);
@@ -185,19 +230,18 @@ export default function App() {
       offset += buffer.byteLength;
       setProgress(Math.round((offset / file.size) * 100));
 
-      // แต่ใส่ไว้นิดนึงเพื่อให้ UI ไม่ค้างถ้าเครื่องเร็วจัด
       if (offset % (CHUNK_SIZE * 5) === 0) {
         await new Promise(r => setTimeout(r, 0));
       }
     }
 
-    // 3. Send End Signal
-    // รอให้ Buffer ว่างจริงๆ ก่อนส่ง END เพื่อให้แน่ใจว่า Chunk สุดท้ายไปถึงก่อน
     while (dataChannel.bufferedAmount > 0) {
       await new Promise(r => setTimeout(r, 10));
     }
 
     connRef.current.send({ type: 'END', payload: null } as Packet);
+    const audio = new Audio('/steam-achievement.mp3');
+    audio.play().catch(e => console.log("Audio play failed", e));
     setStatus('Sent successfully!');
   };
 
@@ -212,15 +256,18 @@ export default function App() {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) sendFile(e.target.files[0]);
+  const handleFileSelectSlowUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) sendFileTCP(e.target.files[0]);
+  };
+  const handleFileSelectFastUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) sendFileUDP(e.target.files[0]);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    if (connRef.current && e.dataTransfer.files?.[0]) sendFile(e.dataTransfer.files[0]);
+    if (connRef.current && e.dataTransfer.files?.[0]) sendFileTCP(e.dataTransfer.files[0]);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -255,7 +302,7 @@ export default function App() {
       </div>
 
       <div className="status-text" style={{ position: 'fixed', bottom: '0', right: '0.5rem' }}>
-        v1.2.1
+        v1.3.0
       </div>
 
       <div className="glass-card">
@@ -327,27 +374,36 @@ export default function App() {
           </div>
 
           <div className='glass-subcontainer2'>
-            {/* Progress Bar */}
-            {progress > 0 && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 5 }}>
-                  <span>Transferring...</span>
-                  <span>{progress}%</span>
-                </div>
-                <div className="progress-container">
-                  <div className="progress-bar" style={{ width: `${progress}%` }}></div>
-                </div>
-              </div>
-            )}
-
             {/* --- STATE 2: Connected --- */}
             {connRef.current && (
               <div className="transfer-section">
-                <label className="file-drop-area file-label">
-                  <span className="icon-upload">☁️</span>
-                  <p><strong>Click to upload</strong> or Drag & Drop</p>
-                  <input type="file" onChange={handleFileSelect} className="file-input-hidden" />
-                </label>
+                <div style={{ display: 'flex', width: '100%', gap: '1rem', justifyContent: 'center' }}>
+                  <label className="file-drop-area file-label">
+                    <span className="icon-upload">🐢</span>
+                    <p className='p-label'><strong>Slow Transfer</strong> Recommended (TCP Protocol)</p>
+                    <p className='sub-p-label'>1.5x slower than Fast Transfer but reliable and But the information is accurate.</p>
+                    <input type="file" onChange={handleFileSelectSlowUpload} className="file-input-hidden" />
+                  </label>
+                  <label className="file-drop-area file-label not-recommended">
+                    <span className="icon-upload">⚡</span>
+                    <p className='p-label'><strong>Fast Transfer</strong> (UDP Protocol)</p>
+                    <p className='sub-p-label'>Faster than Slow Transfer but may lose some data on unstable connections.</p>
+                    <input type="file" onChange={handleFileSelectFastUpload} className="file-input-hidden" />
+                  </label>
+                </div>
+
+                {/* Progress Bar */}
+                {progress > 0 && (
+                  <div style={{ margin: '10px 0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 5 }}>
+                      <span>Transferring...</span>
+                      <span>{progress}%</span>
+                    </div>
+                    <div className="progress-container">
+                      <div className="progress-bar" style={{ width: `${progress}%` }}></div>
+                    </div>
+                  </div>
+                )}
 
                 {receivedFileUrl && (
                   <div className="download-card">

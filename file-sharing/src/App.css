@@ -238,6 +238,15 @@ body {
     background: var(--primary-hover);
 }
 
+.p-label {
+    margin: 0;
+}
+
+.sub-p-label {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
 .file-input-hidden {
     display: none;
 }
@@ -245,6 +254,10 @@ body {
 .file-label {
     display: block;
     cursor: pointer;
+}
+
+.not-recommended {
+    opacity: 0.6;
 }
 
 .icon-upload {
