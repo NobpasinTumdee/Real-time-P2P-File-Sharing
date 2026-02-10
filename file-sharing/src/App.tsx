@@ -305,7 +305,7 @@ export default function App() {
                     <QRCode value={shareUrl} />
                   </div>
                   <div className="status-text">
-                    {status} Lorem ipsum dolor sit amet, consectetur adipisicing elit. Voluptas, autem.
+                    {status}
                   </div>
                   <button className="btn-secondary" onClick={() => setShowScanner(true)}>
                     Scan QR Code
