@@ -23,7 +23,8 @@ interface FileChunk {
   offset: number;
 }
 
-const CHUNK_SIZE = 16 * 1024; // 16KB per chunk to prevent buffer overflow
+// 🚀 ปรับขนาด Chunk ให้ใหญ่ขึ้นเพื่อความเร็ว (64KB is sweet spot for WebRTC)
+const CHUNK_SIZE = 64 * 1024;
 
 export default function App() {
   // --- States ---
@@ -82,7 +83,7 @@ export default function App() {
     return () => peer.destroy();
   }, []);
 
-  // --- 2. Connection Logic ---
+  // --- Connection Logic ---
   const connectToPeer = (remoteId: string, peer: Peer) => {
     setStatus(`Connecting to ${remoteId}...`);
     const conn = peer.connect(remoteId);
@@ -93,13 +94,18 @@ export default function App() {
     connRef.current = conn;
     conn.on('open', () => {
       setStatus('Connected');
-      setShowScanner(false); // Close scanner if open
+      setShowScanner(false);
     });
     conn.on('data', (data: unknown) => handleIncomingData(data as Packet));
     conn.on('close', () => {
       setStatus('Disconnected');
       connRef.current = null;
       resetTransferState();
+    });
+    // เพิ่มการดัก Error ของ Connection ด้วย
+    conn.on('error', (err) => {
+      console.error("Connection Error:", err);
+      setStatus('Transfer Error');
     });
   };
 
@@ -110,7 +116,7 @@ export default function App() {
     receivedSize.current = 0;
   };
 
-  // --- 3. Receive Logic (Handling Chunks) ---
+  // --- Receive Logic ---
   const handleIncomingData = (packet: Packet) => {
     if (packet.type === 'META') {
       // เริ่มต้นรับไฟล์ใหม่
@@ -141,22 +147,33 @@ export default function App() {
     }
   };
 
-  // --- 4. Send Logic (Chunking) ---
+  // --- 🚀 Send Logic (Fixed with Backpressure) ---
   const sendFile = async (file: File) => {
     if (!connRef.current) return;
 
     setStatus(`Sending ${file.name}...`);
     setProgress(0);
 
-    // 4.1 Send Metadata
+    // 1. Send Metadata
     connRef.current.send({
       type: 'META',
       payload: { name: file.name, size: file.size, type: file.type }
     } as Packet);
 
-    // 4.2 Loop Send Chunks
+    // 2. Loop Send Chunks with Flow Control
     let offset = 0;
+
+    // เข้าถึง DataChannel เพื่อเช็ค Buffer (ต้อง Cast type นิดหน่อย)
+    const dataChannel = (connRef.current as any).dataChannel as RTCDataChannel;
+
     while (offset < file.size) {
+      // เช็คว่า Buffer เต็มหรือไม่? (Backpressure)
+      // ถ้า buffer เกิน 64KB ให้รอก่อน อย่าเพิ่งยัดเพิ่ม
+      if (dataChannel.bufferedAmount > 64 * 1024) {
+        await new Promise(r => setTimeout(r, 10)); // รอ 10ms แล้วเช็คใหม่
+        continue; // วนลูปกลับไปเช็คใหม่
+      }
+
       const slice = file.slice(offset, offset + CHUNK_SIZE);
       const buffer = await slice.arrayBuffer();
 
@@ -168,11 +185,18 @@ export default function App() {
       offset += buffer.byteLength;
       setProgress(Math.round((offset / file.size) * 100));
 
-      // Trick: รอเล็กน้อยเพื่อให้ Event Loop ทำงาน (ป้องกัน UI ค้าง)
-      await new Promise(r => setTimeout(r, 0));
+      // แต่ใส่ไว้นิดนึงเพื่อให้ UI ไม่ค้างถ้าเครื่องเร็วจัด
+      if (offset % (CHUNK_SIZE * 5) === 0) {
+        await new Promise(r => setTimeout(r, 0));
+      }
     }
 
-    // 4.3 Send End Signal
+    // 3. Send End Signal
+    // รอให้ Buffer ว่างจริงๆ ก่อนส่ง END เพื่อให้แน่ใจว่า Chunk สุดท้ายไปถึงก่อน
+    while (dataChannel.bufferedAmount > 0) {
+      await new Promise(r => setTimeout(r, 10));
+    }
+
     connRef.current.send({ type: 'END', payload: null } as Packet);
     setStatus('Sent successfully!');
   };
@@ -205,11 +229,8 @@ export default function App() {
   };
 
   const handleScanResult = (result: any) => {
-    // Library นี้จะส่งค่ามาเป็น Array ให้เอาตัวแรก
     const rawValue = result?.[0]?.rawValue;
     if (rawValue) {
-      // ... logic เดิม ...
-      // เช่นเช็คว่าเป็น URL หรือ ID 4 ตัว
       try {
         const url = new URL(rawValue);
         const rid = url.searchParams.get('remoteId');
@@ -233,17 +254,17 @@ export default function App() {
         <span>Drop file to send! 🚀</span>
       </div>
 
+      <div className="status-text" style={{ position: 'fixed', bottom: '0', right: '0.5rem' }}>
+        v1.2.1
+      </div>
+
       <div className="glass-card">
         {/* Header */}
         <div className="header">
           <div className="status-text">
             <h2>Quick File</h2>
-            {status}
           </div>
           <div style={{ display: 'flex', gap: '1rem' }}>
-            <div className="status-text" style={{alignContent:'center'}}>
-              version 1.2.0
-            </div>
             <button
               className="theme-toggle"
               title="Support Me"
@@ -283,6 +304,9 @@ export default function App() {
                   <div className="qr-frame">
                     <QRCode value={shareUrl} />
                   </div>
+                  <div className="status-text">
+                    {status} Lorem ipsum dolor sit amet, consectetur adipisicing elit. Voluptas, autem.
+                  </div>
                   <button className="btn-secondary" onClick={() => setShowScanner(true)}>
                     Scan QR Code
                   </button>
@@ -305,12 +329,15 @@ export default function App() {
           <div className='glass-subcontainer2'>
             {/* Progress Bar */}
             {progress > 0 && (
-              <>
-                <p>Progress: {progress}%</p>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 5 }}>
+                  <span>Transferring...</span>
+                  <span>{progress}%</span>
+                </div>
                 <div className="progress-container">
                   <div className="progress-bar" style={{ width: `${progress}%` }}></div>
                 </div>
-              </>
+              </div>
             )}
 
             {/* --- STATE 2: Connected --- */}
@@ -334,7 +361,6 @@ export default function App() {
               </div>
             )}
           </div>
-
         </div>
       </div>
     </div>
