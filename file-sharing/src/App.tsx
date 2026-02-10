@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import Peer, { type DataConnection } from 'peerjs';
 import QRCode from 'react-qr-code';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import { message } from 'antd';
 import './App.css';
 
 // --- Types ---
@@ -65,6 +66,7 @@ export default function App() {
     const peer = new Peer(myCustomId);
 
     peer.on('open', (id) => {
+      message.success('Welcome! Your ID: ' + id);
       setMyId(id);
       setStatus('Waiting for connection...');
       const params = new URLSearchParams(window.location.search);
@@ -95,6 +97,7 @@ export default function App() {
   const setupConnection = (conn: DataConnection) => {
     connRef.current = conn;
     conn.on('open', () => {
+      message.success('Connected');
       setStatus('Connected');
       setShowScanner(false);
       const audio = new Audio('/applepay.mp3');
@@ -102,6 +105,7 @@ export default function App() {
     });
     conn.on('data', (data: unknown) => handleIncomingData(data as Packet));
     conn.on('close', () => {
+      message.info('Disconnected');
       setStatus('Disconnected');
       connRef.current = null;
       resetTransferState();
@@ -147,6 +151,9 @@ export default function App() {
         const url = URL.createObjectURL(blob);
         setReceivedFileUrl({ name: incomingFileMeta.current.name, url });
         setStatus('File received completely!');
+        message.success('File received successfully!');
+        const audio = new Audio('/steam-achievement.mp3');
+        audio.play().catch(e => console.log("Audio play failed", e));
       }
     }
   };
@@ -195,6 +202,7 @@ export default function App() {
     const audio = new Audio('/steam-achievement.mp3');
     audio.play().catch(e => console.log("Audio play failed", e));
     setStatus('Sent successfully!');
+    message.success('File sent successfully!');
   };
 
   // --- Send via UDP Logic ---
@@ -243,6 +251,7 @@ export default function App() {
     const audio = new Audio('/steam-achievement.mp3');
     audio.play().catch(e => console.log("Audio play failed", e));
     setStatus('Sent successfully!');
+    message.success('File sent successfully!');
   };
 
   // --- Handlers ---
@@ -375,7 +384,7 @@ export default function App() {
 
           <div className='glass-subcontainer2'>
             {/* --- STATE 2: Connected --- */}
-            {connRef.current && (
+            {connRef.current ? (
               <div className="transfer-section">
                 <div style={{ display: 'flex', width: '100%', gap: '1rem', justifyContent: 'center' }}>
                   <label className="file-drop-area file-label">
@@ -414,6 +423,60 @@ export default function App() {
                     </a>
                   </div>
                 )}
+              </div>
+            ) : (
+              <div className="guide-card">
+                <div className="guide-title">
+                  <span>📚</span> How to use
+                </div>
+
+                {/* Step 1 */}
+                <div className="guide-step">
+                  <div className="step-number">1</div>
+                  <div>
+                    <strong>Open on 2 Devices:</strong><br />
+                    Open this website on both the <b>Sender</b> and <b>Receiver</b> devices.<br />
+                    <small style={{ color: 'var(--text-muted)' }}>(Supports PC, Laptop, Tablet, Mobile)</small>
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="guide-step">
+                  <div className="step-number">2</div>
+                  <div>
+                    <strong>Connect:</strong><br />
+                    Scan the QR Code or enter the 4-digit ID shown on the screen to pair the devices.
+                  </div>
+                </div>
+
+                {/* Step 3 - Detailed Protocol Explanation */}
+                <div className="guide-step" style={{ alignItems: 'flex-start' }}>
+                  <div className="step-number">3</div>
+                  <div>
+                    <strong>Select Transfer Protocol:</strong><br />
+                    <div style={{ marginTop: '8px', fontSize: '0.9rem' }}>
+
+                      {/* TCP Explanation */}
+                      <div style={{ marginBottom: '10px' }}>
+                        <span style={{ fontWeight: 'bold', color: '#2cab7c' }}>🐢 Reliable Mode (TCP-like)</span>
+                        <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px', color: 'var(--text-muted)' }}>
+                          <li><b>Pros:</b> 100% Data Integrity. Guarantees no corruption. Best for Videos, Images, ZIPs.</li>
+                          <li><b>Cons:</b> Slower (Verifies every data packet).</li>
+                        </ul>
+                      </div>
+
+                      {/* UDP Explanation */}
+                      <div>
+                        <span style={{ fontWeight: 'bold', color: '#f59e0b' }}>⚡ Fast Mode (UDP)</span>
+                        <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px', color: 'var(--text-muted)' }}>
+                          <li><b>Pros:</b> Maximum speed. Good for small, non-critical files.</li>
+                          <li><b>Cons:</b> Risk of data loss or glitching if the network is unstable.</li>
+                        </ul>
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
