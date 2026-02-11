@@ -5,7 +5,7 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import { message } from 'antd';
 
 import { MdDarkMode } from "react-icons/md";
-import { FiSun } from "react-icons/fi";
+import { FiDownload, FiSun } from "react-icons/fi";
 import { LiaDonateSolid } from "react-icons/lia";
 import { FaCheck, FaRegLightbulb } from "react-icons/fa";
 import { LuCopy, LuCopyCheck, LuLink } from "react-icons/lu";
@@ -42,7 +42,7 @@ export default function App() {
   const [status, setStatus] = useState<string>('Initializing...');
   const [progress, setProgress] = useState<number>(0); // 0-100
   const [showScanner, setShowScanner] = useState<boolean>(false);
-  const [receivedFileUrl, setReceivedFileUrl] = useState<{ name: string; url: string } | null>(null);
+  const [receivedFiles, setReceivedFiles] = useState<Array<{ name: string; url: string; type: string; time: string }>>([]);
 
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -52,7 +52,7 @@ export default function App() {
   const peerRef = useRef<Peer | null>(null);
   const connRef = useRef<DataConnection | null>(null);
 
-  // Buffer สำหรับพักข้อมูลไฟล์ขาเข้า
+  // Buffer
   const incomingFileBuffer = useRef<Array<ArrayBuffer>>([]);
   const incomingFileMeta = useRef<FileMeta | null>(null);
   const receivedSize = useRef<number>(0);
@@ -155,9 +155,16 @@ export default function App() {
     else if (packet.type === 'END') {
       // จบการรับไฟล์ -> ประกอบร่าง
       if (incomingFileMeta.current) {
+        const time = (new Date()).toLocaleTimeString();
         const blob = new Blob(incomingFileBuffer.current, { type: incomingFileMeta.current.type });
         const url = URL.createObjectURL(blob);
-        setReceivedFileUrl({ name: incomingFileMeta.current.name, url });
+
+        // Create new Object 
+        const newFile = { name: incomingFileMeta.current.name, url: url, type: incomingFileMeta.current.type, time: time };
+
+        // append to list
+        setReceivedFiles(prev => [newFile, ...prev]);
+
         setStatus('File received completely!');
         message.success('File received successfully!');
         const audio = new Audio('/steam-achievement.mp3');
@@ -436,7 +443,7 @@ export default function App() {
                 {progress > 0 && (
                   <div style={{ margin: '10px 0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 5 }}>
-                      <span>Transferring...</span>
+                      <span>{progress === 100 ? 'Transfer Completed' : 'Transfering...'}</span>
                       <span>{progress}%</span>
                     </div>
                     <div className="progress-container">
@@ -445,13 +452,80 @@ export default function App() {
                   </div>
                 )}
 
-                {receivedFileUrl && (
-                  <div className="download-card">
-                    <h3>📦 File Received!</h3>
-                    <p style={{ wordBreak: 'break-all', fontSize: '0.9rem' }}>{receivedFileUrl.name}</p>
-                    <a href={receivedFileUrl.url} download={receivedFileUrl.name} className="download-btn">
-                      Download Now
-                    </a>
+                {receivedFiles.length > 0 && (
+                  <div style={{ marginTop: '20px', width: '100%' }}>
+                    <h3 style={{ color: 'var(--primary)', marginBottom: '10px' }}>
+                      📦 Received Files ({receivedFiles.length})
+                    </h3>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {receivedFiles.map((file, index) => {
+                        const isImage = file.type.startsWith('image/');
+                        const isVideo = file.type.startsWith('video/');
+
+                        return (
+                          <div key={index} className="download-card" style={{ marginTop: 0, animationDelay: `${index * 0.1}s` }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+                                {isImage ? (
+                                  // 🖼️ Picture Preview
+                                  <img
+                                    src={file.url}
+                                    alt="preview"
+                                    style={{
+                                      width: '48px',
+                                      height: '48px',
+                                      objectFit: 'cover',
+                                      borderRadius: '8px',
+                                      marginRight: '12px',
+                                      border: '1px solid var(--border-color)',
+                                      backgroundColor: '#fff'
+                                    }}
+                                  />
+                                ) : isVideo ? (
+                                  // 🎬 Video
+                                  <span style={{ fontSize: '2rem', marginRight: '12px' }}>🎬</span>
+                                ) : (
+                                  // 📄 (PDF, Zip etc)
+                                  <span style={{ fontSize: '2rem', marginRight: '12px' }}>📄</span>
+                                )}
+                                <div style={{ textAlign: 'left' }}>
+                                  <span style={{ wordBreak: 'break-all', fontSize: '0.9rem', fontWeight: 'bold', display: 'block' }}>
+                                    {file.name}
+                                  </span>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{file.type} • {file.time}</span>
+                                </div>
+                              </div>
+
+                              <a
+                                href={file.url}
+                                download={file.name}
+                                className="download-btn"
+                                style={{ padding: '8px 16px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                              >
+                                <FiDownload />
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Clear History */}
+                    <button
+                      onClick={() => setReceivedFiles([])}
+                      style={{
+                        marginTop: '15px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      Clear History
+                    </button>
                   </div>
                 )}
               </div>

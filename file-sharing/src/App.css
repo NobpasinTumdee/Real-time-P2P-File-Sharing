@@ -274,6 +274,7 @@ body {
     font-size: 0.9rem;
     color: var(--text-muted);
 }
+
 .file-input-hidden {
     display: none;
 }
@@ -335,47 +336,47 @@ body {
 
 /* --- Guide --- */
 .guide-card {
-  background: var(--primary-light);
-  padding: 1.5rem;
-  border-radius: 16px;
-  margin-top: 1rem;
-  text-align: left;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    background: var(--primary-light);
+    padding: 1.5rem;
+    border-radius: 16px;
+    margin-top: 1rem;
+    text-align: left;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
 }
 
 .guide-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  color: var(--primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .guide-step {
-  display: flex;
-  align-items: start;
-  gap: 12px;
-  margin-bottom: 12px;
-  font-size: 0.9rem;
-  color: var(--text-main);
-  line-height: 1.5;
+    display: flex;
+    align-items: start;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+    color: var(--text-main);
+    line-height: 1.5;
 }
 
 .step-number {
-  background: var(--primary);
-  color: var(--bg-color);
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-  font-weight: bold;
-  flex-shrink: 0;
+    background: var(--primary);
+    color: var(--bg-color);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: bold;
+    flex-shrink: 0;
 }
 
 /* --- Animations --- */
@@ -469,5 +470,14 @@ body {
         margin: 0;
         font-size: 1.6rem;
         font-weight: 700;
+    }
+
+    .file-drop-area {
+        padding: 1rem;
+        font-size: 0.7rem;
+    }
+
+    .sub-p-label {
+        display: none;
     }
 }
