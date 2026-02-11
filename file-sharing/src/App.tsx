@@ -3,6 +3,14 @@ import Peer, { type DataConnection } from 'peerjs';
 import QRCode from 'react-qr-code';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { message } from 'antd';
+
+import { MdDarkMode } from "react-icons/md";
+import { FiSun } from "react-icons/fi";
+import { LiaDonateSolid } from "react-icons/lia";
+import { FaCheck, FaRegLightbulb } from "react-icons/fa";
+import { LuCopy, LuCopyCheck, LuLink } from "react-icons/lu";
+
+
 import './App.css';
 
 // --- Types ---
@@ -299,6 +307,19 @@ export default function App() {
 
   const shareUrl = `${window.location.href.split('?')[0]}?remoteId=${myId}`;
 
+  // --- copy ---
+  const [copySuccess, setCopySuccess] = useState(false);
+  const handleCopy = async (context: string) => {
+    try {
+      await navigator.clipboard.writeText(context);
+      message.success('Link copied to clipboard!', 2);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
   return (
     <div
       className={`app-container ${isDragging ? 'dragging' : ''}`}
@@ -311,7 +332,7 @@ export default function App() {
       </div>
 
       <div className="status-text" style={{ position: 'fixed', bottom: '0', right: '0.5rem' }}>
-        v1.3.0
+        v1.3.1
       </div>
 
       <div className="glass-card">
@@ -326,14 +347,14 @@ export default function App() {
               title="Support Me"
               onClick={() => window.open('https://nobpasintumdee.github.io/MyPortfolio/#/contact', '_blank')}
             >
-              🍵
+              <LiaDonateSolid />
             </button>
             <button
-              className="theme-toggle"
+              className="theme-toggle dark-mode-icon"
               onClick={() => setIsDarkMode(!isDarkMode)}
               title="Toggle Theme"
             >
-              {isDarkMode ? '🌙' : '☀️'}
+              {isDarkMode ? <FiSun /> : <MdDarkMode />}
             </button>
           </div>
         </div>
@@ -347,7 +368,17 @@ export default function App() {
                 <>
                   {/* ID & Status */}
                   <div className="status-badge">
-                    <div className="id-display">{myId || '....'}</div>
+                    <div className="id-display" onClick={() => handleCopy(myId)}>{myId || '....'}</div>
+                    {myId && (
+                      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <button className="btn-copy" onClick={() => handleCopy(myId)}>
+                          {copySuccess ? <LuCopyCheck /> : <LuCopy />}
+                        </button>
+                        <button className="btn-copy" onClick={() => handleCopy(shareUrl)}>
+                          {copySuccess ? <FaCheck /> : <LuLink />}
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <input
                     className="code-input"
@@ -357,8 +388,8 @@ export default function App() {
                   />
 
                   {/* QR Display */}
-                  <div className="qr-frame">
-                    <QRCode value={shareUrl} />
+                  <div className="qr-frame" style={{ filter: `${myId ? 'blur(0px)' : 'blur(10px)'}` }}>
+                    <QRCode value={shareUrl} bgColor='transparent' fgColor='var(--primary)' title={shareUrl} level='L' />
                   </div>
                   <div className="status-text">
                     {status}
@@ -427,7 +458,7 @@ export default function App() {
             ) : (
               <div className="guide-card">
                 <div className="guide-title">
-                  <span>📚</span> How to use
+                  <span><FaRegLightbulb /></span> How to use
                 </div>
 
                 {/* Step 1 */}
