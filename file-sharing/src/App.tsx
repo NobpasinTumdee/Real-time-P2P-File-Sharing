@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Peer, { type DataConnection } from 'peerjs';
-import QRCode from 'react-qr-code';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import QRCode from 'react-qr-code';
 import { message } from 'antd';
+import { useTranslation } from 'react-i18next';
 
 import { MdDarkMode } from "react-icons/md";
 import { FiDownload, FiSun } from "react-icons/fi";
@@ -36,6 +37,7 @@ interface FileChunk {
 const CHUNK_SIZE = 64 * 1024;
 
 export default function App() {
+  const { t, i18n } = useTranslation();
   // --- States ---
   const [myId, setMyId] = useState<string>('');
   const [targetIdInput, setTargetIdInput] = useState<string>('');
@@ -335,11 +337,11 @@ export default function App() {
     >
       {/* Full Screen Drag Overlay */}
       <div className="drag-overlay">
-        <span>Drop file to send! 🚀</span>
+        <span>{t('Drop_file')} 🚀</span>
       </div>
 
       <div className="status-text" style={{ position: 'fixed', bottom: '0', right: '0.5rem' }}>
-        v1.3.1
+        v1.4.0
       </div>
 
       <div className="glass-card">
@@ -349,6 +351,13 @@ export default function App() {
             <h2>Quick File</h2>
           </div>
           <div style={{ display: 'flex', gap: '1rem' }}>
+            <button
+              className="theme-toggle"
+              onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'th' : 'en')}
+              title="Change Language"
+            >
+              {i18n.language === 'en' ? <img src="/flag/en.png" alt="English Flag" style={{ width: '1.5rem' }} /> : <img src="/flag/th.png" alt="Thai Flag" style={{ width: '1.5rem' }} />}
+            </button>
             <button
               className="theme-toggle"
               title="Support Me"
@@ -402,7 +411,7 @@ export default function App() {
                     {status}
                   </div>
                   <button className="btn-secondary" onClick={() => setShowScanner(true)}>
-                    Scan QR Code
+                    {t('QR_scanner')}
                   </button>
                 </>
               ) : (
@@ -413,7 +422,7 @@ export default function App() {
                     style={{ marginTop: 10 }}
                     onClick={() => setShowScanner(false)}
                   >
-                    Close Camera
+                    {t('close_camera')}
                   </button>
                 </div>
               )}
@@ -427,14 +436,14 @@ export default function App() {
                 <div style={{ display: 'flex', width: '100%', gap: '1rem', justifyContent: 'center' }}>
                   <label className="file-drop-area file-label">
                     <span className="icon-upload">🐢</span>
-                    <p className='p-label'><strong>Slow Transfer</strong> Recommended (TCP Protocol)</p>
-                    <p className='sub-p-label'>1.5x slower than Fast Transfer but reliable and But the information is accurate.</p>
+                    <p className='p-label'><strong>{t('p-label-tcp-strong')}</strong>{t('p-label-tcp')}</p>
+                    <p className='sub-p-label'>{t('sub-p-label-tcp')}</p>
                     <input type="file" onChange={handleFileSelectSlowUpload} className="file-input-hidden" />
                   </label>
                   <label className="file-drop-area file-label not-recommended">
                     <span className="icon-upload">⚡</span>
-                    <p className='p-label'><strong>Fast Transfer</strong> (UDP Protocol)</p>
-                    <p className='sub-p-label'>Faster than Slow Transfer but may lose some data on unstable connections.</p>
+                    <p className='p-label'><strong>{t('p-label-udp-strong')}</strong>{t('p-label-udp')}</p>
+                    <p className='sub-p-label'>{t('sub-p-label-udp')}</p>
                     <input type="file" onChange={handleFileSelectFastUpload} className="file-input-hidden" />
                   </label>
                 </div>
@@ -455,7 +464,7 @@ export default function App() {
                 {receivedFiles.length > 0 && (
                   <div style={{ marginTop: '20px', width: '100%' }}>
                     <h3 style={{ color: 'var(--primary)', marginBottom: '10px' }}>
-                      📦 Received Files ({receivedFiles.length})
+                      📦 {t('received')} ({receivedFiles.length})
                     </h3>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -524,7 +533,7 @@ export default function App() {
                         textDecoration: 'underline'
                       }}
                     >
-                      Clear History
+                      {t('clear')}
                     </button>
                   </div>
                 )}
@@ -532,16 +541,16 @@ export default function App() {
             ) : (
               <div className="guide-card">
                 <div className="guide-title">
-                  <span><FaRegLightbulb /></span> How to use
+                  <span><FaRegLightbulb /></span> {t('guide-title')}
                 </div>
 
                 {/* Step 1 */}
                 <div className="guide-step">
                   <div className="step-number">1</div>
                   <div>
-                    <strong>Open on 2 Devices:</strong><br />
-                    Open this website on both the <b>Sender</b> and <b>Receiver</b> devices.<br />
-                    <small style={{ color: 'var(--text-muted)' }}>(Supports PC, Laptop, Tablet, Mobile)</small>
+                    <strong>{t('guide-step-1-title')}:</strong><br />
+                    {t('guide-step-1')}<br />
+                    <small style={{ color: 'var(--text-muted)' }}>{t('guide-step-1-small')}</small>
                   </div>
                 </div>
 
@@ -549,8 +558,8 @@ export default function App() {
                 <div className="guide-step">
                   <div className="step-number">2</div>
                   <div>
-                    <strong>Connect:</strong><br />
-                    Scan the QR Code or enter the 4-digit ID shown on the screen to pair the devices.
+                    <strong>{t('guide-step-2-title')}:</strong><br />
+                    {t('guide-step-2')}
                   </div>
                 </div>
 
@@ -558,24 +567,24 @@ export default function App() {
                 <div className="guide-step" style={{ alignItems: 'flex-start' }}>
                   <div className="step-number">3</div>
                   <div>
-                    <strong>Select Transfer Protocol:</strong><br />
+                    <strong>{t('guide-step-3-title')}:</strong><br />
                     <div style={{ marginTop: '8px', fontSize: '0.9rem' }}>
 
                       {/* TCP Explanation */}
                       <div style={{ marginBottom: '10px' }}>
-                        <span style={{ fontWeight: 'bold', color: '#2cab7c' }}>🐢 Reliable Mode (TCP-like)</span>
+                        <span style={{ fontWeight: 'bold', color: '#2cab7c' }}>🐢 {t('guide-step-3-title-tcp')}</span>
                         <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px', color: 'var(--text-muted)' }}>
-                          <li><b>Pros:</b> 100% Data Integrity. Guarantees no corruption. Best for Videos, Images, ZIPs.</li>
-                          <li><b>Cons:</b> Slower (Verifies every data packet).</li>
+                          <li><b>{t('pros')}:</b> {t('guide-step-3-title-tcp-1')}</li>
+                          <li><b>{t('cons')}:</b> {t('guide-step-3-title-tcp-2')}</li>
                         </ul>
                       </div>
 
                       {/* UDP Explanation */}
                       <div>
-                        <span style={{ fontWeight: 'bold', color: '#f59e0b' }}>⚡ Fast Mode (UDP)</span>
+                        <span style={{ fontWeight: 'bold', color: '#f59e0b' }}>⚡ {t('guide-step-3-title-udp')}</span>
                         <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px', color: 'var(--text-muted)' }}>
-                          <li><b>Pros:</b> Maximum speed. Good for small, non-critical files.</li>
-                          <li><b>Cons:</b> Risk of data loss or glitching if the network is unstable.</li>
+                          <li><b>{t('pros')}:</b> {t('guide-step-3-title-udp-1')}</li>
+                          <li><b>{t('cons')}:</b> {t('guide-step-3-title-udp-2')}</li>
                         </ul>
                       </div>
 
