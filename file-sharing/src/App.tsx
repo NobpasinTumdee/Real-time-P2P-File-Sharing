@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Peer, { type DataConnection } from 'peerjs';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 import QRCode from 'react-qr-code';
 import { message } from 'antd';
 import { useTranslation } from 'react-i18next';
@@ -329,6 +331,50 @@ export default function App() {
     }
   };
 
+  // --- Save file ---
+  const handleDownload = async (fileUrl: string, fileName: string) => {
+    // เช็คว่าเป็นแอปมือถือหรือไม่? (Android/iOS)
+    if (Capacitor.isNativePlatform()) {
+      // --- Logic สำหรับ Mobile (บันทึกลงเครื่อง) ---
+      try {
+        message.loading('Saving to device...', 1);
+        const response = await fetch(fileUrl);
+        const blob = await response.blob();
+
+        // แปลง Blob เป็น Base64
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          const base64data = (reader.result as string).split(',')[1];
+
+          try {
+            const savedFile = await Filesystem.writeFile({
+              path: fileName,
+              data: base64data,
+              directory: Directory.Documents,
+            });
+            message.success('Saved to Documents folder!');
+            console.log('Saved to:', savedFile.uri);
+          } catch (err) {
+            message.error('Save failed on device');
+          }
+        };
+      } catch (e) {
+        message.error('Error processing file');
+      }
+
+    } else {
+      // --- Logic สำหรับ Web (สร้าง Link กดโหลดอัตโนมัติ) ---
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      message.success('Download started');
+    }
+  };
+
   return (
     <div
       className={`app-container ${isDragging ? 'dragging' : ''}`}
@@ -506,14 +552,21 @@ export default function App() {
                                 </div>
                               </div>
 
-                              <a
+                              {/* <a
                                 href={file.url}
                                 download={file.name}
                                 className="download-btn"
                                 style={{ padding: '8px 16px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
                               >
                                 <FiDownload />
-                              </a>
+                              </a> */}
+                              <div
+                                onClick={() => handleDownload(file.url, file.name)}
+                                className="download-btn"
+                                style={{ padding: '8px 16px', fontSize: '0.8rem', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                              >
+                                <FiDownload />
+                              </div>
                             </div>
                           </div>
                         );
