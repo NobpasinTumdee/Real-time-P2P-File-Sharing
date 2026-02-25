@@ -12,12 +12,13 @@ import { FiDownload, FiSun } from "react-icons/fi";
 import { LiaDonateSolid } from "react-icons/lia";
 import { FaCheck, FaRegLightbulb } from "react-icons/fa";
 import { LuCopy, LuCopyCheck, LuLink } from "react-icons/lu";
+import { GiCancel } from "react-icons/gi";
 
 
 import './App.css';
 
 // --- Types ---
-type PacketType = 'META' | 'CHUNK' | 'END';
+type PacketType = 'META' | 'CHUNK' | 'END' | 'CANCEL';
 
 interface Packet {
   type: PacketType;
@@ -35,9 +36,6 @@ interface FileChunk {
   offset: number;
 }
 
-// 🚀 ปรับขนาด Chunk ให้ใหญ่ขึ้นเพื่อความเร็ว (64KB is sweet spot for WebRTC)
-const CHUNK_SIZE = 64 * 1024;
-
 export default function App() {
   const { t, i18n } = useTranslation();
   // --- States ---
@@ -47,6 +45,12 @@ export default function App() {
   const [progress, setProgress] = useState<number>(0); // 0-100
   const [showScanner, setShowScanner] = useState<boolean>(false);
   const [receivedFiles, setReceivedFiles] = useState<Array<{ name: string; url: string; type: string; time: string }>>([]);
+
+  // --- States ---
+  const [isTransferring, setIsTransferring] = useState<boolean>(false);
+
+  // --- Refs ---
+  const cancelTransferRef = useRef<boolean>(false);
 
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -131,6 +135,7 @@ export default function App() {
 
   const resetTransferState = () => {
     setProgress(0);
+    setIsTransferring(false);
     incomingFileBuffer.current = [];
     incomingFileMeta.current = null;
     receivedSize.current = 0;
@@ -141,8 +146,15 @@ export default function App() {
     if (packet.type === 'META') {
       // เริ่มต้นรับไฟล์ใหม่
       resetTransferState();
+      setIsTransferring(true);
       incomingFileMeta.current = packet.payload as FileMeta;
       setStatus(`Receiving: ${incomingFileMeta.current.name}`);
+    }
+    else if (packet.type === 'CANCEL') {
+      cancelTransferRef.current = true;
+      resetTransferState();
+      setStatus('Transfer cancelled');
+      message.warning('Transfer was cancelled');
     }
     else if (packet.type === 'CHUNK') {
       // รับชิ้นส่วนไฟล์
@@ -173,34 +185,54 @@ export default function App() {
         message.success('File received successfully!');
         const audio = new Audio('/steam-achievement.mp3');
         audio.play().catch(e => console.log("Audio play failed", e));
+        setIsTransferring(false);
       }
     }
   };
 
   // --- Send via TCP Logic ---
+  const getOptimalChunkSize = (fileSize: number) => {
+    // Dynamic Chunk Size: (max 256KB)
+    if (fileSize > 1024 * 1024 * 100) return 256 * 1024; // > 100MB --> 256KB
+    if (fileSize > 1024 * 1024 * 10) return 128 * 1024;  // > 10MB --> 128KB
+    return 64 * 1024;                                    // default 64KB
+  };
+
   const sendFileTCP = async (file: File) => {
     if (!connRef.current) return;
 
     setStatus(`Sending ${file.name}...`);
     setProgress(0);
+    setIsTransferring(true);
+    cancelTransferRef.current = false;
 
     const dataChannel = (connRef.current as any).dataChannel as RTCDataChannel;
+    const dynamicChunkSize = getOptimalChunkSize(file.size);
+    const bufferThreshold = dynamicChunkSize * 8;
 
-    // 1. Send Metadata
     connRef.current.send({
       type: 'META',
       payload: { name: file.name, size: file.size, type: file.type }
     } as Packet);
 
     let offset = 0;
+    let lastProgressUpdate = 0;
 
     while (offset < file.size) {
-      // ถ้า buffer เกินขีดจำกัด ให้ "หยุดรอ" (await) จนกว่าจะว่าง
-      while (dataChannel.bufferedAmount > CHUNK_SIZE) {
-        await new Promise(r => setTimeout(r, 5));
+      // เช็คว่าผู้ใช้กดยกเลิกหรือไม่
+      if (cancelTransferRef.current) {
+        connRef.current.send({ type: 'CANCEL', payload: null } as Packet);
+        resetTransferState();
+        setStatus('Cancelled');
+        return; // ออกจากลูปและฟังก์ชันทันที
       }
 
-      const slice = file.slice(offset, offset + CHUNK_SIZE);
+      if (dataChannel.bufferedAmount > bufferThreshold) {
+        await new Promise(r => setTimeout(r, 1));
+        continue;
+      }
+
+      const slice = file.slice(offset, offset + dynamicChunkSize);
       const buffer = await slice.arrayBuffer();
 
       connRef.current.send({
@@ -209,19 +241,29 @@ export default function App() {
       } as Packet);
 
       offset += buffer.byteLength;
-      setProgress(Math.round((offset / file.size) * 100));
+
+      const currentPercent = Math.round((offset / file.size) * 100);
+      if (currentPercent > lastProgressUpdate || offset >= file.size) {
+        setProgress(currentPercent);
+        lastProgressUpdate = currentPercent;
+      }
     }
 
-    // รอจนกว่าข้อมูลชิ้นสุดท้ายจะออกจาก Buffer จริงๆ
+    // เช็คอีกครั้งเผื่อกดยกเลิกช่วงท้าย
     while (dataChannel.bufferedAmount > 0) {
+      if (cancelTransferRef.current) return;
       await new Promise(r => setTimeout(r, 10));
     }
 
-    connRef.current.send({ type: 'END', payload: null } as Packet);
-    const audio = new Audio('/steam-achievement.mp3');
-    audio.play().catch(e => console.log("Audio play failed", e));
-    setStatus('Sent successfully!');
-    message.success('File sent successfully!');
+    // ส่งสำเร็จ
+    if (!cancelTransferRef.current) {
+      connRef.current.send({ type: 'END', payload: null } as Packet);
+      const audio = new Audio('/steam-achievement.mp3');
+      audio.play().catch(e => console.log("Audio play failed", e));
+      setStatus('Sent successfully!');
+      message.success('File sent successfully!');
+      resetTransferState();
+    }
   };
 
   // --- Send via UDP Logic ---
@@ -230,6 +272,8 @@ export default function App() {
 
     setStatus(`Sending ${file.name}...`);
     setProgress(0);
+    setIsTransferring(true);
+    cancelTransferRef.current = false; // รีเซ็ตสถานะยกเลิกก่อนเริ่มส่ง
 
     connRef.current.send({
       type: 'META',
@@ -237,16 +281,25 @@ export default function App() {
     } as Packet);
 
     let offset = 0;
+    let lastProgressUpdate = 0;
 
     const dataChannel = (connRef.current as any).dataChannel as RTCDataChannel;
 
+    // Dynamic Chunk Size แบบเดียวกับ TCP
+    const dynamicChunkSize = getOptimalChunkSize(file.size);
+    const bufferThreshold = dynamicChunkSize * 8;
+
     while (offset < file.size) {
-      if (dataChannel.bufferedAmount > 64 * 1024) {
-        await new Promise(r => setTimeout(r, 10));
+      // ดักการกดยกเลิก
+      if (cancelTransferRef.current) return;
+
+      // ปรับ Buffer ทะลวงขีดจำกัดเดิมที่ 64KB ให้รองรับตามขนาด Chunk
+      if (dataChannel.bufferedAmount > bufferThreshold) {
+        await new Promise(r => setTimeout(r, 1));
         continue;
       }
 
-      const slice = file.slice(offset, offset + CHUNK_SIZE);
+      const slice = file.slice(offset, offset + dynamicChunkSize);
       const buffer = await slice.arrayBuffer();
 
       connRef.current.send({
@@ -255,22 +308,35 @@ export default function App() {
       } as Packet);
 
       offset += buffer.byteLength;
-      setProgress(Math.round((offset / file.size) * 100));
 
-      if (offset % (CHUNK_SIZE * 5) === 0) {
+      // ลดภาระการ Re-render UI
+      const currentPercent = Math.round((offset / file.size) * 100);
+      if (currentPercent > lastProgressUpdate || offset >= file.size) {
+        setProgress(currentPercent);
+        lastProgressUpdate = currentPercent;
+      }
+
+      // ปรับจังหวะหายใจของ CPU ให้สัมพันธ์กับก้อนข้อมูลใหม่
+      if (offset % (dynamicChunkSize * 5) === 0) {
         await new Promise(r => setTimeout(r, 0));
       }
     }
 
     while (dataChannel.bufferedAmount > 0) {
+      // ดักยกเลิกตอนรอเคลียร์ Buffer
+      if (cancelTransferRef.current) return;
       await new Promise(r => setTimeout(r, 10));
     }
 
-    connRef.current.send({ type: 'END', payload: null } as Packet);
-    const audio = new Audio('/steam-achievement.mp3');
-    audio.play().catch(e => console.log("Audio play failed", e));
-    setStatus('Sent successfully!');
-    message.success('File sent successfully!');
+    // ส่งสำเร็จ (เมื่อไม่ได้กดยกเลิก)
+    if (!cancelTransferRef.current) {
+      connRef.current.send({ type: 'END', payload: null } as Packet);
+      const audio = new Audio('/steam-achievement.mp3');
+      audio.play().catch(e => console.log("Audio play failed", e));
+      setStatus('Sent successfully!');
+      message.success('File sent successfully!');
+      resetTransferState();
+    }
   };
 
   // --- Handlers ---
@@ -375,6 +441,19 @@ export default function App() {
     }
   };
 
+  // --- Cancel file Transfer ---
+  const handleCancelTransfer = () => {
+    cancelTransferRef.current = true;
+
+    if (connRef.current) {
+      connRef.current.send({ type: 'CANCEL', payload: null } as Packet);
+    }
+
+    resetTransferState();
+    setStatus('Transfer Cancelled');
+    message.warning('You cancelled the transfer');
+  };
+
   return (
     <div
       className={`app-container ${isDragging ? 'dragging' : ''}`}
@@ -387,7 +466,7 @@ export default function App() {
       </div>
 
       <div className="status-text" style={{ position: 'fixed', bottom: '0', right: '0.5rem' }}>
-        v1.4.0
+        v1.5.0
       </div>
 
       <div className="glass-card">
@@ -495,10 +574,16 @@ export default function App() {
                 </div>
 
                 {/* Progress Bar */}
-                {progress > 0 && (
+                {isTransferring && progress > 0 && (
                   <div style={{ margin: '10px 0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 5 }}>
-                      <span>{progress === 100 ? 'Transfer Completed' : 'Transfering...'}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 5, alignItems: 'center' }}>
+                      <span>{progress === 100 ? 'Transfer Completed' : 'Transferring...'}</span>
+                      <button onClick={handleCancelTransfer} className='btn-cancel-transfer' >
+                        <GiCancel />
+                        <p>
+                          {t('cancel')}
+                        </p>
+                      </button>
                       <span>{progress}%</span>
                     </div>
                     <div className="progress-container">

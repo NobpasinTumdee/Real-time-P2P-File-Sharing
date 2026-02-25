@@ -238,6 +238,37 @@ body {
     background: var(--primary-hover);
 }
 
+.btn-cancel-transfer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0px;
+    width: 10%;
+    background-color: transparent;
+    color: #ff4d4f;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease-in-out;
+}
+
+.btn-cancel-transfer p {
+    margin: 0 0 0 10px;
+    visibility: hidden;
+}
+
+.btn-cancel-transfer:hover {
+    width: 50%;
+    padding: 8px;
+    color: white;
+    background-color: #ff4d4f;
+}
+
+.btn-cancel-transfer:hover>p {
+    visibility: visible;
+}
+
 /* --- QR Code --- */
 .qr-frame {
     padding: 1rem;
