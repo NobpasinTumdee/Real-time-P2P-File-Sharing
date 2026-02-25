@@ -53,7 +53,9 @@ export default function App() {
   const cancelTransferRef = useRef<boolean>(false);
 
   // Theme State
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return document.cookie.includes('theme=dark');
+  });
   const [isDragging, setIsDragging] = useState(false);
 
   // --- Refs ---
@@ -67,7 +69,9 @@ export default function App() {
 
   // --- Theme Toggle Logic ---
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+    const theme = isDarkMode ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.cookie = `theme=${theme}; path=/; max-age=31536000`;
   }, [isDarkMode]);
 
   // --- Helpers ---
@@ -466,7 +470,7 @@ export default function App() {
       </div>
 
       <div className="status-text" style={{ position: 'fixed', bottom: '0', right: '0.5rem' }}>
-        v1.5.0
+        v1.5.1
       </div>
 
       <div className="glass-card">
